@@ -74,6 +74,14 @@
                          requestType:(MGTwitterRequestType)requestType 
                         responseType:(MGTwitterResponseType)responseType;
 
+- (NSString *)_sendRequestWithMethod:(NSString *)method 
+                                path:(NSString *)path 
+                     queryParameters:(NSDictionary *)params 
+                                body:(NSString *)body
+                                data:(NSData *)data
+                         requestType:(MGTwitterRequestType)requestType 
+                        responseType:(MGTwitterResponseType)responseType;
+
 // Parsing methods
 - (void)_parseDataForConnection:(MGTwitterHTTPURLConnection *)connection;
 
@@ -402,6 +410,9 @@
 
 - (NSString *)_encodeString:(NSString *)string
 {
+  // NOTE(dom): workaround if the input is not a NSString
+  string = [NSString stringWithFormat:@"%@", string];
+  
     NSString *result = (NSString *)CFURLCreateStringByAddingPercentEscapes(NULL, 
                                                                  (CFStringRef)string, 
                                                                  NULL, 
@@ -452,7 +463,20 @@
 - (NSString *)_sendRequestWithMethod:(NSString *)method 
                                 path:(NSString *)path 
                      queryParameters:(NSDictionary *)params 
-                                body:(NSString *)body 
+                                body:(NSString *)body
+                         requestType:(MGTwitterRequestType)requestType 
+                        responseType:(MGTwitterResponseType)responseType
+{
+  return [self _sendRequestWithMethod:method path:path queryParameters:params body:body data:nil
+          requestType:requestType responseType:responseType]; 
+}
+
+
+- (NSString *)_sendRequestWithMethod:(NSString *)method 
+                                path:(NSString *)path 
+                     queryParameters:(NSDictionary *)params 
+                                body:(NSString *)body
+                                data:(NSData *)data
                          requestType:(MGTwitterRequestType)requestType 
                         responseType:(MGTwitterResponseType)responseType
 {
@@ -554,8 +578,19 @@
                                                             (body) ? @"&" : @"?" , 
                                                             _clientSourceToken]];
         }
-        
-        if (finalBody) {
+      
+        if (data != nil) {
+          // NOTE(dom): http://lists.apple.com/archives/web-dev/2007/dec/msg00017.html
+          NSString *boundary = @"----boundary";
+          NSString *contentType = [NSString stringWithFormat:@"multipart/form- data, boundary=%@", boundary];
+          [theRequest setValue:contentType forHTTPHeaderField:@"Content-type"];
+          NSMutableData *finalBodyData = [[[finalBody dataUsingEncoding:NSUTF8StringEncoding] mutableCopy] autorelease];
+          [finalBodyData appendData:[[NSString stringWithFormat:@"\r\n--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+          [finalBodyData appendData:[@"Content-Type: image/jpeg\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+          [finalBodyData appendData:data];
+          [finalBodyData appendData:[[NSString stringWithFormat:@"\r\n--%@--\r \n",boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+          [theRequest setHTTPBody:finalBodyData];
+        } else if (finalBody) {
             [theRequest setHTTPBody:[finalBody dataUsingEncoding:NSUTF8StringEncoding]];
 #if DEBUG
 			if (YES) {
@@ -564,7 +599,6 @@
 #endif
         }
     }
-    
     
     // Create a connection using this request, with the default timeout and caching policy, 
     // and appropriate Twitter request and response types for parsing and error reporting.
@@ -1038,6 +1072,43 @@
                         queryParameters:params body:body 
                             requestType:MGTwitterUpdateSendRequest
                            responseType:MGTwitterStatus];
+}
+
+- (NSString *)sendUpdate:(NSString *)status withMedia:(NSData *)mediaObject
+{
+  return [self sendUpdate:status inReplyTo:0 withMedia:mediaObject];
+}
+
+- (NSString *)sendUpdate:(NSString *)status inReplyTo:(unsigned long)updateID withMedia:(NSData *)mediaObject
+{
+    if (!status) {
+        return nil;
+    }
+    
+    NSString *path = [NSString stringWithFormat:@"statuses/update_with_media.%@", API_FORMAT];
+    
+    NSString *trimmedText = status;
+    if ([trimmedText length] > MAX_MESSAGE_LENGTH) {
+      trimmedText = [trimmedText substringToIndex:MAX_MESSAGE_LENGTH];
+    }
+    
+    NSMutableDictionary *params = [NSMutableDictionary dictionaryWithCapacity:0];
+    [params setObject:trimmedText forKey:@"status"];
+    if (updateID > 0) {
+        [params setObject:[NSString stringWithFormat:@"%u", updateID] forKey:@"in_reply_to_status_id"];
+    }
+    if (mediaObject != nil) {
+      // NOTE(dom): change @"image.jpg" to an input parameter of the function
+        [params setObject:[NSArray arrayWithObject:@"image.jpg"] forKey:@"media"];
+    }
+    NSString *body = [self _queryStringWithBase:nil parameters:params prefixed:NO];
+    
+    return [self _sendRequestWithMethod:HTTP_POST_METHOD path:path 
+                        queryParameters:params body:body data:mediaObject
+                            requestType:MGTwitterUpdateSendRequest
+                           responseType:MGTwitterStatus];
+  
+  
 }
 
 

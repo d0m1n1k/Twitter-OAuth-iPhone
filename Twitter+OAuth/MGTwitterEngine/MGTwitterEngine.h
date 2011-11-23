@@ -96,6 +96,8 @@
 - (NSString *)getUpdate:(unsigned long)updateID; // statuses/show
 - (NSString *)sendUpdate:(NSString *)status; // statuses/update
 - (NSString *)sendUpdate:(NSString *)status inReplyTo:(unsigned long)updateID; // statuses/update
+- (NSString *)sendUpdate:(NSString *)status withMedia:(NSData *)mediaObject;
+- (NSString *)sendUpdate:(NSString *)status inReplyTo:(unsigned long)updateID withMedia:(NSData *)mediaObject; // statuses/update_with_media
 
 - (NSString *)getRepliesStartingAtPage:(int)pageNum; // statuses/mentions
 - (NSString *)getRepliesSinceID:(unsigned long)sinceID startingAtPage:(int)pageNum count:(int)count; // statuses/mentions
